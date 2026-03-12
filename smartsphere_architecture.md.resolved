@@ -1,0 +1,379 @@
+# SmartSphere Home System — Architecture Analysis & Planning
+
+---
+
+## 1. High-Level System Overview
+
+SmartSphere is a **smart home automation simulator** with three tiers:
+
+| Tier | Technology | Role |
+|---|---|---|
+| **Frontend** | Vercel (React/Next.js) | Dashboard UI — device control, monitoring, alerts |
+| **Backend** | Render (Java Spring Boot) | Business logic, OOP simulation, REST API |
+| **Database** | Supabase (PostgreSQL + Realtime) | Device state, logs, user config |
+
+```mermaid
+graph LR
+    A["Browser (Vercel)"] -- REST / WebSocket --> B["Java Backend (Render)"]
+    B -- SQL / Realtime --> C["Supabase (PostgreSQL)"]
+    B -- File I/O --> D["Log Files (on Render)"]
+```
+
+> [!IMPORTANT]
+> The Java backend on Render is the **single source of truth** for all device logic, OOP concepts, and multithreading. The frontend only renders state and sends commands.
+
+---
+
+## 2. Frontend Architecture
+
+The dashboard hosted on **Vercel** should include these sections:
+
+### 2.1 Dashboard Layout
+
+| Section | Purpose |
+|---|---|
+| **Device Grid** | Cards for each device (Light, Fan, AC, DoorLock, Camera) with ON/OFF toggles and status indicators |
+| **Automation Modes Panel** | Buttons for Night / Morning / Away modes with active-mode highlighting |
+| **Energy Monitor** | Real-time bar/donut chart showing per-device and total power consumption |
+| **Activity Log** | Scrollable, filterable timeline of device actions, mode changes, and alerts |
+| **Alerts & Notifications** | Banner/toast area for security alerts, energy warnings, maintenance suggestions |
+| **Device Health** | Usage-duration badges per device; maintenance warnings when thresholds are exceeded |
+
+### 2.2 Page / Route Structure
+
+```
+/                → Dashboard (all sections above)
+/devices         → Detailed device list & individual controls
+/energy          → Full energy monitoring with historical graphs
+/logs            → Complete activity log with search/filter
+/settings        → Automation mode configuration, thresholds
+```
+
+### 2.3 Frontend–Backend Communication
+
+- **REST API calls** (fetch/axios) for commands: toggle device, activate mode, get logs.
+- **Supabase Realtime subscriptions** (or polling) for live device-state and alert updates pushed from the backend.
+
+---
+
+## 3. Backend Architecture
+
+The Java backend on **Render** encapsulates **all OOP concepts** and business logic.
+
+### 3.1 Module Breakdown
+
+| Module | Responsibility | Key OOP Concepts |
+|---|---|---|
+| **Device Management** | CRUD and state control for all devices | Classes, Objects, Inheritance, Interfaces, Dynamic Method Dispatch |
+| **Automation Engine** | Night / Morning / Away mode orchestration | Interfaces, Polymorphism |
+| **Energy Monitor** | Calculate and track power consumption | Encapsulation, Exception Handling |
+| **Logging System** | Persist every device action and event | File Handling, Packages |
+| **Security System** | Detect anomalies, trigger alerts | Exception Handling, Multithreading |
+| **Device Health Tracker** | Monitor usage duration, suggest maintenance | Constructors, Encapsulation |
+| **Emergency Handler** | Fire/intrusion auto-response protocols | Exception Handling, Multithreading |
+| **Predictive Energy Saver** | Suggest energy-saving actions when consumption is high | Encapsulation |
+
+### 3.2 How Modules Communicate
+
+```mermaid
+graph TD
+    API["REST Controller Layer"] --> DM["Device Manager"]
+    API --> AE["Automation Engine"]
+    API --> EM["Energy Monitor"]
+    API --> LS["Logging System"]
+    DM --> EM
+    DM --> LS
+    AE --> DM
+    AE --> LS
+    SS["Security System"] --> DM
+    SS --> LS
+    EH["Emergency Handler"] --> DM
+    EH --> SS
+    DHT["Device Health Tracker"] --> DM
+    PES["Predictive Energy Saver"] --> EM
+```
+
+### 3.3 Multithreaded Device Simulation
+
+Each device instance runs on its **own thread** to simulate real-world concurrent operation:
+
+- A `DeviceThread` (extends `Thread` or implements `Runnable`) wraps each `Device` object.
+- Threads periodically update device state (e.g., energy tick, health counter).
+- The Security System thread monitors device states for anomalies.
+- `synchronized` blocks or `ConcurrentHashMap` protect shared device state.
+
+---
+
+## 4. Device Class Hierarchy
+
+### 4.1 Design
+
+```mermaid
+classDiagram
+    class Controllable {
+        <<interface>>
+        +turnOn() void
+        +turnOff() void
+        +getStatus() String
+    }
+    class EnergyConsumer {
+        <<interface>>
+        +getPowerUsage() double
+    }
+    class Device {
+        <<abstract>>
+        -String deviceId
+        -String name
+        -boolean isOn
+        -double powerRating
+        -long usageDuration
+        +Device(id, name, powerRating)
+        +turnOn() void
+        +turnOff() void
+        +getStatus() String
+        +getPowerUsage() double
+        +performAction(action)* void
+    }
+    Controllable <|.. Device
+    EnergyConsumer <|.. Device
+    Device <|-- Light
+    Device <|-- Fan
+    Device <|-- AC
+    Device <|-- DoorLock
+    Device <|-- SecurityCamera
+
+    class Light {
+        -int brightness
+        +setBrightness(level) void
+        +performAction(action) void
+    }
+    class Fan {
+        -int speed
+        +setSpeed(level) void
+        +performAction(action) void
+    }
+    class AC {
+        -double temperature
+        +setTemperature(temp) void
+        +performAction(action) void
+    }
+    class DoorLock {
+        -boolean isLocked
+        +lock() void
+        +unlock() void
+        +performAction(action) void
+    }
+    class SecurityCamera {
+        -boolean isRecording
+        +startRecording() void
+        +stopRecording() void
+        +performAction(action) void
+    }
+```
+
+### 4.2 OOP Concept Mapping
+
+| Concept | Where It Appears |
+|---|---|
+| **Classes & Objects** | `Device`, `Light`, `Fan`, `AC`, `DoorLock`, `SecurityCamera` — each instantiated per room/device |
+| **Constructors** | `Device(id, name, powerRating)` — parameterized constructor in abstract base, called via `super()` in subclasses |
+| **Inheritance** | `Light extends Device`, `Fan extends Device`, etc. |
+| **Interfaces** | `Controllable` (on/off), `EnergyConsumer` (power usage) — implemented by `Device` |
+| **Dynamic Method Dispatch** | `Device d = new Light(...); d.performAction("dim");` — resolved at runtime to `Light.performAction()` |
+| **Packages** | `com.smartsphere.devices`, `com.smartsphere.automation`, `com.smartsphere.energy`, `com.smartsphere.security`, `com.smartsphere.logging` |
+| **Exception Handling** | `InvalidDeviceActionException`, `DeviceNotFoundException`, `EnergyThresholdExceededException` |
+| **Multithreading** | `DeviceThread` per device, `SecurityMonitorThread`, `EnergyMonitorThread` |
+| **File Handling** | `ActivityLogger` writes to `logs/activity.log`; optionally synced to Supabase |
+
+---
+
+## 5. Data Flow
+
+### 5.1 User Toggles a Device
+
+```mermaid
+sequenceDiagram
+    participant U as User (Browser)
+    participant F as Frontend (Vercel)
+    participant B as Backend (Render)
+    participant DB as Supabase
+
+    U->>F: Clicks "Turn ON Light"
+    F->>B: POST /api/devices/{id}/toggle
+    B->>B: DeviceManager.toggleDevice(id) → polymorphic call
+    B->>DB: UPDATE devices SET is_on=true
+    B->>B: ActivityLogger.log("Light turned ON")
+    B->>B: EnergyMonitor.recalculate()
+    B-->>F: 200 OK { device state }
+    F-->>U: UI updates (light card shows ON)
+```
+
+### 5.2 Automation Mode Activation
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant B as Backend
+    participant DB as Supabase
+
+    F->>B: POST /api/modes/activate { mode: "NIGHT" }
+    B->>B: AutomationEngine.activate(NIGHT)
+    B->>B: Iterates devices → dim lights, lock doors, start cameras
+    B->>DB: Batch UPDATE device states
+    B->>B: ActivityLogger.log("Night Mode activated")
+    B-->>F: 200 OK { updated device states }
+```
+
+### 5.3 Security Alert
+
+```
+SecurityMonitorThread detects: door unlocked during Away Mode
+  → SecuritySystem.triggerAlert("Unauthorized door access")
+    → ActivityLogger.log(alert)
+    → Supabase INSERT into alerts table
+    → Frontend picks up alert via Realtime subscription → shows notification
+```
+
+---
+
+## 6. Suggested Folder Structure
+
+### Backend (Java — Spring Boot on Render)
+
+```
+smartsphere-backend/
+├── src/main/java/com/smartsphere/
+│   ├── SmartSphereApplication.java
+│   ├── controller/
+│   │   ├── DeviceController.java
+│   │   ├── ModeController.java
+│   │   ├── EnergyController.java
+│   │   └── LogController.java
+│   ├── model/
+│   │   ├── Device.java              (abstract base)
+│   │   ├── Light.java
+│   │   ├── Fan.java
+│   │   ├── AC.java
+│   │   ├── DoorLock.java
+│   │   ├── SecurityCamera.java
+│   │   ├── Controllable.java        (interface)
+│   │   └── EnergyConsumer.java       (interface)
+│   ├── service/
+│   │   ├── DeviceManager.java
+│   │   ├── AutomationEngine.java
+│   │   ├── EnergyMonitor.java
+│   │   ├── SecuritySystem.java
+│   │   ├── DeviceHealthTracker.java
+│   │   ├── EmergencyHandler.java
+│   │   └── PredictiveEnergySaver.java
+│   ├── thread/
+│   │   ├── DeviceThread.java
+│   │   ├── SecurityMonitorThread.java
+│   │   └── EnergyMonitorThread.java
+│   ├── logging/
+│   │   └── ActivityLogger.java
+│   ├── exception/
+│   │   ├── InvalidDeviceActionException.java
+│   │   ├── DeviceNotFoundException.java
+│   │   └── EnergyThresholdExceededException.java
+│   └── config/
+│       └── SupabaseConfig.java
+├── src/main/resources/
+│   └── application.properties
+├── logs/
+│   └── activity.log
+└── pom.xml
+```
+
+### Frontend (Next.js on Vercel)
+
+```
+smartsphere-frontend/
+├── src/
+│   ├── app/
+│   │   ├── page.jsx                 (Dashboard)
+│   │   ├── devices/page.jsx
+│   │   ├── energy/page.jsx
+│   │   ├── logs/page.jsx
+│   │   └── settings/page.jsx
+│   ├── components/
+│   │   ├── DeviceCard.jsx
+│   │   ├── ModePanel.jsx
+│   │   ├── EnergyChart.jsx
+│   │   ├── ActivityLog.jsx
+│   │   ├── AlertBanner.jsx
+│   │   └── DeviceHealthBadge.jsx
+│   ├── lib/
+│   │   ├── api.js                   (REST calls to backend)
+│   │   └── supabase.js              (Realtime subscriptions)
+│   └── styles/
+│       └── globals.css
+├── public/
+└── package.json
+```
+
+### Supabase Tables
+
+| Table | Key Columns |
+|---|---|
+| `devices` | `id`, `name`, `type`, `is_on`, `power_rating`, `brightness/speed/temp`, `usage_duration`, `updated_at` |
+| `activity_logs` | `id`, `device_id`, `action`, `timestamp`, `details` |
+| `alerts` | `id`, `type`, `message`, `severity`, `is_resolved`, `created_at` |
+| `modes` | `id`, `name`, `is_active`, `device_actions` (JSONB) |
+| `energy_snapshots` | `id`, `total_watts`, `per_device` (JSONB), `recorded_at` |
+
+---
+
+## 7. API Endpoints (Suggested)
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/devices` | List all devices with current state |
+| `POST` | `/api/devices/{id}/toggle` | Turn device ON/OFF |
+| `POST` | `/api/devices/{id}/action` | Perform device-specific action (e.g., set brightness) |
+| `GET` | `/api/energy` | Get current total and per-device consumption |
+| `GET` | `/api/energy/history` | Historical energy snapshots |
+| `POST` | `/api/modes/activate` | Activate a specific automation mode |
+| `GET` | `/api/modes` | List modes and their statuses |
+| `GET` | `/api/logs` | Retrieve activity logs (paginated, filterable) |
+| `GET` | `/api/alerts` | List active alerts |
+| `POST` | `/api/alerts/{id}/resolve` | Mark alert as resolved |
+| `GET` | `/api/health` | Device health/maintenance status |
+
+---
+
+## 8. Summary — How Java OOP Concepts Fit
+
+```mermaid
+mindmap
+  root((SmartSphere OOP))
+    Classes & Objects
+      Device, Light, Fan, AC, DoorLock, SecurityCamera
+      DeviceManager, AutomationEngine, EnergyMonitor
+    Constructors
+      Parameterized Device constructor
+      super() calls in subclasses
+    Inheritance
+      Light/Fan/AC/DoorLock/Camera extend Device
+    Interfaces
+      Controllable — turnOn, turnOff, getStatus
+      EnergyConsumer — getPowerUsage
+    Dynamic Method Dispatch
+      Device ref pointing to Light/Fan objects
+      performAction resolved at runtime
+    Packages
+      devices, automation, energy, security, logging, exception
+    Exception Handling
+      Custom exceptions for invalid actions and thresholds
+      try-catch in controllers
+    Multithreading
+      DeviceThread per device
+      SecurityMonitorThread
+      EnergyMonitorThread
+    File Handling
+      ActivityLogger writes to activity.log
+      Optional sync to Supabase
+```
+
+> [!TIP]
+> This architecture cleanly separates **presentation (Vercel)**, **business logic (Render/Java)**, and **persistence (Supabase)**, while ensuring every required Java OOP concept has a clear, demonstrable role in the system.
